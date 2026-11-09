@@ -46,6 +46,21 @@ function Read-HashList([string]$Path) {
     return $h
 }
 
+function Read-KnownHashes([string]$Path) {
+    # хэши файлов прошлых версий русификатора: rel -> список хэшей
+    $h = @{}
+    if (Test-Path -LiteralPath $Path) {
+        foreach ($line in [IO.File]::ReadAllLines($Path)) {
+            if ($line.Trim()) {
+                $hash, $rel = $line -split "  ", 2
+                if (-not $h.ContainsKey($rel)) { $h[$rel] = @() }
+                $h[$rel] += $hash
+            }
+        }
+    }
+    return $h
+}
+
 function Apply-CsPatch([string]$Source, [string]$PatchFile, [string]$Output) {
     $pf = [IO.File]::OpenRead($PatchFile)
     $gz = New-Object IO.Compression.GZipStream($pf, [IO.Compression.CompressionMode]::Decompress)

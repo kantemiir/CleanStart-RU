@@ -14,13 +14,14 @@ $dstRoot = Join-Path $GameDir "Clean Start_Data"
 $backup = Join-Path $GameDir "_backup_ru"
 $orig = Read-HashList (Join-Path $data "originals.sha256")
 $result = Read-HashList (Join-Path $data "results.sha256")
+$previous = Read-KnownHashes (Join-Path $data "previous.sha256")
 
 Write-Host "Игра: $GameDir"
 Write-Host "Проверяю версию игры..."
 $stale = $false
 foreach ($rel in $orig.Keys) {
     $cur = Get-Sha (Join-Path $dstRoot $rel)
-    if ($cur -ne $orig[$rel] -and $cur -ne $result[$rel]) {
+    if ($cur -ne $orig[$rel] -and $cur -ne $result[$rel] -and $previous[$rel] -notcontains $cur) {
         Write-Host "  не совпадает: $rel" -ForegroundColor Yellow
         $stale = $true
     }
