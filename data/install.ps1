@@ -18,35 +18,47 @@ $previous = Read-KnownHashes (Join-Path $data "previous.sha256")
 
 Write-Host "Игра: $GameDir"
 Write-Host "Проверяю версию игры..."
-$stale = $false
+# Для каждого файла годится одно из двух состояний:
+#  - файл игры оригинальный (как в Steam) — его и сохраняем в бэкап;
+#  - файл уже наш (эта или прошлая версия русификатора), а в бэкапе лежит оригинал этой версии игры.
+# Бэкап от прошлой версии игры (после обновления в Steam) заменяется свежими оригиналами.
+$stale = @(); $needVerify = @(); $refresh = @()
 foreach ($rel in $orig.Keys) {
     $cur = Get-Sha (Join-Path $dstRoot $rel)
-    if ($cur -ne $orig[$rel] -and $cur -ne $result[$rel] -and $previous[$rel] -notcontains $cur) {
-        Write-Host "  не совпадает: $rel" -ForegroundColor Yellow
-        $stale = $true
+    $bk = Get-Sha (Join-Path $backup $rel)
+    if ($cur -eq $orig[$rel]) {
+        if ($bk -ne $orig[$rel]) { $refresh += $rel }
+    } elseif ($cur -eq $result[$rel] -or $previous[$rel] -contains $cur) {
+        if ($bk -ne $orig[$rel]) { $needVerify += $rel }
+    } else {
+        $stale += $rel
     }
 }
-if (Test-Path $backup) {
-    foreach ($rel in $orig.Keys) {
-        if ((Get-Sha (Join-Path $backup $rel)) -ne $orig[$rel]) { $stale = $true; Write-Host "  бэкап повреждён: $rel" -ForegroundColor Yellow }
-    }
-}
-if ($stale) {
+if ($stale.Count) {
+    foreach ($rel in $stale) { Write-Host "  не совпадает: $rel" -ForegroundColor Yellow }
     Write-Host ""
     Write-Host "Версия игры отличается от той, под которую сделан русификатор (видимо, игра обновилась)." -ForegroundColor Red
-    Write-Host "Установка отменена, чтобы ничего не сломать. Нужна новая версия русификатора." -ForegroundColor Red
-    Write-Host "Если русификатор уже стоял: Steam -> Clean Start -> Свойства -> Установленные файлы -> Проверить целостность."
+    Write-Host "Установка отменена, ничего не изменено. Новая версия русификатора:" -ForegroundColor Red
+    Write-Host "  https://github.com/kantemiir/CleanStart-RU/releases/latest"
+    Write-Host "Если там пока нет версии под обновление — подождите, она выйдет."
+    exit 1
+}
+if ($needVerify.Count) {
+    foreach ($rel in $needVerify) { Write-Host "  в бэкапе нет оригинала: $rel" -ForegroundColor Yellow }
+    Write-Host ""
+    Write-Host "Файлы изменены прошлой версией русификатора, а оригиналов этой версии игры в бэкапе нет." -ForegroundColor Red
+    Write-Host "Проверьте файлы в Steam: Clean Start -> Свойства -> Установленные файлы -> Проверить целостность,"
+    Write-Host "затем запустите установку снова. Ничего не изменено."
     exit 1
 }
 
-# бэкап оригиналов (один раз)
-if (-not (Test-Path $backup)) {
-    foreach ($rel in $orig.Keys) {
-        $p = Join-Path $dstRoot $rel
-        if ((Get-Sha $p) -ne $orig[$rel]) { throw "Файл уже изменён, а бэкапа нет: $rel. Проверьте целостность файлов в Steam и запустите установку снова." }
+# бэкап оригиналов: новый или обновлённый после обновления игры
+if ($refresh.Count) {
+    foreach ($rel in $refresh) {
         $b = Join-Path $backup $rel
         New-Item -ItemType Directory -Force (Split-Path $b) | Out-Null
-        Copy-Item $p $b
+        Copy-Item (Join-Path $dstRoot $rel) $b -Force
+        if ((Get-Sha $b) -ne $orig[$rel]) { throw "Не удалось сохранить оригинал в бэкап: $rel" }
     }
     Write-Host "Оригиналы сохранены в $backup"
 }
